@@ -14,20 +14,19 @@
 
 #define BTN_GPIO      GPIO_NUM_4
 #define BTN_GPIO_G    GPIO_NUM_5
-#define DEBOUNCE_TIME 60
+#define DEBOUNCE_TIME 20
 #define LONG_PRESSED  10000
 #define SHORT_PRESSED 300
-#define TIME_WINDOW   3000//3000//300 ms
+#define TIME_WINDOW   25000//3000//300 ms
 
 // Global variable
 uint32_t _millis = 0;
 uint8_t pasado = 1;
-int boton = 0;
-int i = 1, j = 1, contador = 0;
-int debounce_counter=0;
+int boton = 0, arreglo[8], contador_alt=0;
+int i = 1, j = 1, contador = 0, debounce_counter=0;
 int estado_actual=1, estado_pasado=1, pressedTime=0, releasedTime=0;
 uint8_t nibble_state=0;
-int counter_nibble=0;
+int counter_nibble=0, led_s=1;
 
 uint8_t win_state=1;
 int win_counter=0;
@@ -122,117 +121,71 @@ void delayMs(uint16_t ms)
     vTaskDelay(ms/portTICK_PERIOD_MS);
 }
 
-uint8_t checkBtn2(void){
+uint8_t checkBtn(void)
+{
     estado_actual=gpio_get_level(BTN_GPIO);
-        if((_millis-DEBOUNCE_TIME)>10)
+    if(debounce_counter>0)  
+    {
+        debounce_counter++;
+        if(debounce_counter>=DEBOUNCE_TIME)
         {
             if(estado_pasado==1 && estado_actual==0)
-            {
-                //el boton ha sido presionado
+            {//el boton ha sido presionado
                 pressedTime=_millis;
-                //printf("\npressed time %d", pressedTime);
             }
             else if(estado_pasado==0 && estado_actual==1)
             {
                 releasedTime=_millis;
-                //printf("\nreleasedTime: %d", releasedTime);
-                //printf("\ntIEMPO: %d", releasedTime-pressedTime);
-                if(releasedTime-pressedTime > 10000)
+                if(releasedTime-pressedTime > 4000)
                 {
                     pressedTime=0;
                     releasedTime=0;
                     estado_pasado=1;
-                    printf("\nLong pressed");
+                    debounce_counter=0;
                     return eBtnLongPressed;
                 }
-                else
+                else if(releasedTime-pressedTime > 30)
                 {
                     pressedTime=0;
                     releasedTime=0;
                     estado_pasado=1;
-                    printf("\nShort pressed");
+                    debounce_counter=0;
                     return eBtnShortPressed;
                 }
+            } 
+            //estado_pasado=estado_actual;
         }
-    
-        estado_pasado=estado_actual;
+        else if(estado_actual==1 && estado_pasado==1) debounce_counter = 0;
     }
-    return eBtnUndefined;
-}
-
-uint8_t checkBtn1(void)
-{
-    uint8_t actual = gpio_get_level(BTN_GPIO);
-    if(boton > 0){ //Si se habia presionado previamente
-        //delayMs(1);
-        boton++;
-        printf("%d\n", boton);
-        if(boton >= 20){ //Si duro 20 ms o mas es una presion valida
-            if(actual && pasado){ //Si ya no esta presionado
-                if(boton > 1000){
-                    pasado = actual;
-                    boton = 0;
-                    return eBtnLongPressed;
-                }
-                else{
-                    pasado = actual;
-                    boton = 0;
-                    return eBtnShortPressed;
-                }
-            }
-        }
-        else{
-            if(actual && pasado)
-                boton = 0;
-        }
-    }
-    else{ //Primer ms que se presiono
-        if(!actual){
-            //delayMs(1);
-            boton = 1;
-        }
-    }
-    pasado = actual;
+    else if(!estado_actual) debounce_counter=1;
+    estado_pasado=estado_actual;
     return eBtnUndefined;
 }
 
 void sequencia_aleatoria()
 {
-    uint8_t alt;
-    alt=rand()%8+1;
-    prender_led_charlieplexing(alt);
-    delayMs(10);
-}
-
-void walking_zero_sequence1(){
-    if(j<=8){
-        if(i<=8){
-            if (i != j)
-            {
-                prender_led_charlieplexing(i);
-            }
-            contador++;
-            printf("%d  ", j);
-                    printf("%d  ", i);
-                    printf("%d\n", contador);
-            if(contador == 100){
-                contador = 0;
-                if (j == 8)
-                    j=1;
-                else
-                    j++;
-            }
-            if(i == 8)
-                i = 1;
-            else
-                i++;
+    if(contador_alt == 0){
+        for(int i=0; i<8; i++){
+            arreglo[i] = rand()%2;
         }
     }
+    if(led_s<=8){
+        if(arreglo[led_s-1] != 0)
+            prender_led_charlieplexing(led_s);
+        contador_alt++;
+        if(contador_alt>=100)
+            contador_alt=0;
+        if(led_s==8)
+            led_s=1;
+        else
+            led_s++;
+    }
+           
 }
 
 void walking_zero_sequence()
 {
-    int i=0;// j=0, k=0, n=0;
+    int i=0;
         if(walking_zero_counter<=5000)
         {
             for(i=1; i<=8; i++)
@@ -240,7 +193,7 @@ void walking_zero_sequence()
                 if(i!=led_a_apagar)
                 {
                     prender_led_charlieplexing(i);
-                    delayMs(1);//5
+                    delayMs(1);
                     walking_zero_counter++;
                 }
             }
@@ -266,7 +219,7 @@ void nibble_onoff()
             counter_nibble++;
             delayMs(1);
         }
-        delayMs(1);//puede que quite este 
+        delayMs(1);
         if(counter_nibble>5000)
         {
             nibble_state=1;
@@ -281,7 +234,7 @@ void nibble_onoff()
             counter_nibble++;
             delayMs(2);
         }
-        delayMs(2);//puede que quite este 
+        delayMs(2);
         if(counter_nibble>5000)
         {
             nibble_state=0;
@@ -303,7 +256,7 @@ void leds_off()
     gpio_set_level(LED_GPIO_4, 0);
 }
 
-void on_off()
+void on_off()//todos los leds se encienden y despues se apagan 
 {
     int i=0;
     if(!win_state)
@@ -324,6 +277,7 @@ void on_off()
     {
         leds_off();
         delayMs(10);
+        _millis+=10;
         win_counter++;
         if(win_counter>90)
         {
@@ -365,17 +319,15 @@ int app_main(void)
 
     while(1)
     {   
-        switch(checkBtn2())
+        switch(checkBtn())
         {
             case eBtnShortPressed: 
                 if(currentGameState!=eYouWin && currentGameState!=eYouLoose)
                     currentGameState++;
-                //printf("\nShort pressed");
                 i = 1, j = 1, contador = 0;
                 break;
             case eBtnLongPressed: currentGameState = eGameRestart;
                 i = 1, j = 1, contador = 0;
-                //printf("\nLong pressed");
                 break;
             default:
                 break;
@@ -384,9 +336,8 @@ int app_main(void)
         switch(currentGameState)
         {
             case eGameRestart:
-                //countdown = esp_random();
-                //if(countdown>100)
-                countdown=500;
+                _millis=0;
+                countdown = esp_random();
                 countup = 0;
                 currentGameState++;
                 break;
@@ -410,9 +361,6 @@ int app_main(void)
                 }
                 break;
             case eGameOver:
-                printf("\ncountdown: %d", countdown);
-                printf("\ncountup: %d", countup);
-                printf("\ncountdown+countup: %d", countdown+countup);
                 if ((countdown+countup) > TIME_WINDOW)
                 {
                     currentGameState = eYouLoose;
